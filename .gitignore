@@ -1,59 +1,11 @@
-# Python
-__pycache__/
-# Environment variables
-.env
+backend/attend_snap
+client/node_modules
+client/dist
+client/build
+client/.vite
+client/public
 backend/.env
 backend/.env.local
 backend/*.env
-backend/attend_snap
 
-# OS generated files
-.DS_Store
-Thumbs.db
-# Logs
-*.log
-# Dependency directories
-venv/
-ENV/
-.venv/
-
-# Virtual environment
-venv/
-ENV/
-.env
-.env.local
-*.env
-
-# Cache and temporary files
 __pycache__/
-*.py[cod]
-
-# Node
-Client/node_modules/
-Client/dist/
-Client/build/
-Client/.vite/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Specific to project
-backend/attend_snap/
-backend/app/assets/
-backend/.env
-.env
-
-# Images/Media
-*.jpg
-*.jpeg
-*.png
-*.mp4
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
