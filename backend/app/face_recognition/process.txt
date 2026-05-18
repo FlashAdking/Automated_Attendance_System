@@ -1,0 +1,3 @@
+MTCNN: Finds faces in an image.
+FaceNet: Takes those detected faces and turns them into unique numerical 'fingerprints' (embeddings).
+Comparison: We then manually compare these FaceNet embeddings (using metrics like Euclidean distance) to determine if two faces belong to the same person
