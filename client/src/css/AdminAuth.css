@@ -1,0 +1,94 @@
+/* client/src/css/AdminAuth.css */
+
+.auth-container {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background-color: var(--bg-color, #ffffff);
+  color: var(--text-color, #171717);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark mode overrides (assuming tailwind 'dark' class on root or parent) */
+:is(.dark) .auth-container {
+  --bg-color: #0a0a0a;
+  --text-color: #f5f5f5;
+}
+
+.auth-panel {
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+}
+
+/* Mobile first: stacked or form only */
+@media (max-width: 767px) {
+  .hero-panel {
+    display: none; /* Hide hero on small screens to save space */
+  }
+  .form-panel {
+    width: 100%;
+    position: relative;
+    z-index: 10;
+  }
+  /* On mobile, we use a simple fade/swap instead of horizontal sliding */
+  .auth-container.register-mode .form-panel {
+    transform: translateX(0);
+  }
+}
+
+/* Desktop layout: Side by side with sliding animation */
+@media (min-width: 768px) {
+  .auth-panel {
+    width: 50%;
+  }
+  
+  .hero-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 10;
+  }
+
+  .form-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    z-index: 5;
+  }
+
+  /* When register mode is active, slide them to swap sides */
+  .auth-container.register-mode .hero-panel {
+    transform: translateX(100%);
+  }
+
+  .auth-container.register-mode .form-panel {
+    transform: translateX(-100%);
+  }
+}
+
+/* Internal form transitions (fade out old, fade in new) */
+.form-content {
+  opacity: 1;
+  transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+}
+
+.fade-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.fade-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+.fade-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+.fade-exit-active {
+  opacity: 0;
+  transform: translateY(-10px);
+}

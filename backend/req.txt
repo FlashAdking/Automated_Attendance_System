@@ -7,3 +7,10 @@ PyJWT
 python-dotenv
 cloudinary
 pydantic
+motor
+opencv-python
+tensorflow
+numpy
+resend
+matplotlib
+bcrypt
