@@ -15,6 +15,60 @@ from app.models.user_db import UserDB
 router = APIRouter(prefix="/api/student", tags=["Student"])
 
 
+# ── Public Student Self-Service Endpoint ────────────────────────────────────
+@router.post("/lookup")
+async def student_lookup(
+    prn: str,
+    dob: str,
+    db: UserDB = Depends(get_user_db),
+):
+    """
+    Student self-service: verify identity by PRN + Date of Birth.
+    Returns student profile + attendance history (no admin auth needed).
+    DOB must match exactly as stored (YYYY-MM-DD).
+    """
+    logger.info(f"Student self-lookup for PRN: {prn}")
+    student = await db.find_user_by_prn(prn)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Verify DOB as lightweight identity check
+    stored_dob = student.get("dob", "")
+    if stored_dob != dob:
+        raise HTTPException(status_code=401, detail="PRN and Date of Birth do not match")
+
+    # Strip internal fields
+    student.pop("_id", None)
+    student.pop("image_embeddings", None)
+
+    # Compute summary
+    history = student.get("attendance", [])
+    total = len(history)
+    present = sum(1 for r in history if r.get("status") == "present")
+    absent = total - present
+    percentage = round((present / total) * 100, 2) if total > 0 else 0.0
+
+    return {
+        "prn": student["prn"],
+        "name": student.get("name"),
+        "class": student.get("class"),
+        "div": student.get("div"),
+        "email": student.get("email"),
+        "contact": student.get("contact"),
+        "gender": student.get("gender"),
+        "image_link": student.get("image_link", ""),
+        "summary": {
+            "total_sessions": total,
+            "present_count": present,
+            "absent_count": absent,
+            "attendance_percentage": percentage,
+        },
+        "history": history,
+    }
+
+
+
+
 def euclidean_distance(a: np.ndarray, b: np.ndarray) -> float:
     """L2 (Euclidean) distance between two FaceNet 512-D embedding vectors.
     Lower = more similar. Same-person threshold: <= 1.0.

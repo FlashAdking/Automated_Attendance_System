@@ -42,4 +42,4 @@ def get_image_embeddings(image_path, facenet_model, mtcnn_detector):
     ]
 
 
-print("Function `get_image_embeddings` defined.")
+

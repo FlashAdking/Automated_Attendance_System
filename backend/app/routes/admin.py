@@ -660,3 +660,35 @@ async def process_image_attendance(
         "session_date": date,
         "emails": email_summary,
     }
+
+
+@router.delete("/attendance/{session_id}", status_code=200)
+async def delete_session(
+    session_id: str,
+    admin_data: dict = Depends(verify_token),
+    att_db: AttendanceDB = Depends(get_attendance_db),
+):
+    """Permanently delete an attendance session by its ID."""
+    logger.info(f"Admin {admin_data['sub']} deleting session {session_id}")
+    session = await att_db.get_session_by_id(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    deleted = await att_db.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=500, detail="Failed to delete session")
+    return {"message": f"Session {session_id} deleted successfully"}
+
+
+@router.get("/students/{prn}/profile")
+async def get_student_profile(
+    prn: str,
+    admin_data: dict = Depends(verify_token),
+    db: UserDB = Depends(get_user_db),
+):
+    """Return full student profile including attendance history (for student portal)."""
+    student = await db.find_user_by_prn(prn)
+    if not student:
+        raise HTTPException(status_code=404, detail=f"Student {prn} not found")
+    student.pop("_id", None)
+    student.pop("image_embeddings", None)
+    return student

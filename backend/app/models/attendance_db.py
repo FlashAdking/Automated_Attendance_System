@@ -63,3 +63,12 @@ class AttendanceDB:
             {"_id": ObjectId(session_id)},
             {"$set": update_data}
         )
+
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete a session document by its MongoDB ObjectId. Returns True if deleted."""
+        try:
+            result = await self.collection.delete_one({"_id": ObjectId(session_id)})
+            return result.deleted_count > 0
+        except Exception:
+            return False
+

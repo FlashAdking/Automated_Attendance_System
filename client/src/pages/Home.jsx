@@ -275,11 +275,13 @@ export default function Home() {
           <li><a href="#how">How It Works</a></li>
           <li><a href="#trial">Live Demo</a></li>
           <li><a href="#admin">Admin</a></li>
+          <li><a href="/student" onClick={e => { e.preventDefault(); navigate('/student'); }}>Student Portal</a></li>
         </ul>
         <div className="lp-nav-actions">
           <button className="btn-theme" onClick={() => setDarkMode(!darkMode)} aria-label="Toggle theme">
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          <button className="btn-ghost" onClick={() => navigate('/student')}>Student Portal</button>
           <button className="btn-ghost" onClick={() => navigate('/admin/login')}>Sign In</button>
           <button className="btn-primary" onClick={() => navigate('/admin/register')}>Get Started</button>
         </div>
@@ -478,6 +480,8 @@ export default function Home() {
       {/* ── FOOTER ── */}
       <footer className="lp-footer">
         © {new Date().getFullYear()} AttendSnap · AI-Powered Attendance · Built with FaceNet & MTCNN
+        &nbsp;·&nbsp;
+        <a href="/student" onClick={e => { e.preventDefault(); navigate('/student'); }} style={{ color: '#10b981', textDecoration: 'none' }}>Student Portal</a>
       </footer>
     </div>
   );

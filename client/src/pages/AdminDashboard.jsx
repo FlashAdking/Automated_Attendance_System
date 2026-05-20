@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Users, UserPlus, Camera, FileText, CalendarRange, LogOut, Home as HomeIcon, Sun, Moon, CheckCircle2, XCircle, Trash2, Edit2, AlertCircle, Sparkles, Check, X, Clock, HelpCircle, Mail, Phone, BookOpen, ChevronRight, FileSpreadsheet
+  LayoutDashboard, Users, UserPlus, Camera, FileText, CalendarRange, LogOut, Home as HomeIcon, Sun, Moon, CheckCircle2, XCircle, Trash2, Edit2, AlertCircle, Sparkles, Check, X, Clock, HelpCircle, Mail, Phone, BookOpen, ChevronRight, FileSpreadsheet, Loader2
 } from 'lucide-react';
 import '../css/AdminDashboard.css';
 
@@ -12,10 +12,12 @@ const API = 'http://localhost:8000/api/admin';
 function useAuth() {
   const navigate = useNavigate();
   const token = localStorage.getItem('adminToken');
-  if (!token) navigate('/admin/login');
+  useEffect(() => {
+    if (!token) navigate('/admin/login');
+  }, [token, navigate]);
   return {
-    headers: { Authorization: `Bearer ${token}` },
-    token,
+    headers: { Authorization: `Bearer ${token || ''}` },
+    token: token || '',
   };
 }
 
@@ -1102,14 +1104,41 @@ function RecordsTab({ authHeaders, toast }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedSession, setExpandedSession] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  useEffect(() => {
+  const fetchSessions = useCallback(() => {
+    setLoading(true);
     fetch(`${API}/attendance`, { headers: authHeaders })
       .then(r => r.json())
       .then(data => setSessions(Array.isArray(data) ? data : data.records || []))
       .catch(() => toast('Could not fetch records', 'error'))
       .finally(() => setLoading(false));
   }, [authHeaders, toast]);
+
+  useEffect(() => { fetchSessions(); }, [fetchSessions]);
+
+  const handleDelete = async (session, e) => {
+    e.stopPropagation();
+    const sessionKey = session._id || session.session_id;
+    if (!sessionKey) { toast('Cannot identify session ID', 'error'); return; }
+    if (!window.confirm(`Delete session on ${session.date} (${session.subject || 'No subject'})? This cannot be undone.`)) return;
+    setDeletingId(sessionKey);
+    try {
+      const res = await fetch(`${API}/attendance/${sessionKey}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast(d.message || 'Session deleted');
+        fetchSessions();
+        if (expandedSession === sessionKey) setExpandedSession(null);
+      } else {
+        toast(d.detail || 'Delete failed', 'error');
+      }
+    } catch { toast('Network error', 'error'); }
+    finally { setDeletingId(null); }
+  };
 
   return (
     <div className="panel">
@@ -1134,36 +1163,48 @@ function RecordsTab({ authHeaders, toast }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {sessions.map((session, i) => {
-            const isExpanded = expandedSession === session.date;
+            // Use a unique key per session — supports multiple sessions on the same date
+            const sessionKey = session._id || session.session_id || `${session.date}-${session.time_from}-${i}`;
+            const isExpanded = expandedSession === sessionKey;
+            const isDeleting = deletingId === sessionKey;
             return (
-              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+              <div key={sessionKey} style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', opacity: isDeleting ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                 {/* Session Header */}
-                <div 
+                <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'var(--bg-main)', cursor: 'pointer' }}
-                  onClick={() => setExpandedSession(isExpanded ? null : session.date)}
+                  onClick={() => setExpandedSession(isExpanded ? null : sessionKey)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <ChevronRight size={18} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', opacity: 0.6 }} />
                     <div>
                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        Session: {session.date}
+                        {session.date}
+                        {session.subject && <span style={{ fontWeight: 400, opacity: 0.7 }}>· {session.subject}</span>}
                         <span className={`badge ${session.method === 'ai' ? 'badge-blue' : 'badge-yellow'}`} style={{ fontSize: '0.65rem' }}>
-                          {session.method === 'ai' ? 'AI' : 'Manual'}
+                          {session.method === 'ai' ? '🤖 AI' : '✍ Manual'}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>
                         {session.time_from && session.time_to && `${session.time_from} – ${session.time_to} · `}
-                        {session.subject && `${session.subject} · `}
                         Total: {session.total_students || (session.students?.length || 0)} students
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span className="badge badge-green">{session.present_count} Present</span>
                     {session.absent_count > 0 && <span className="badge badge-red">{session.absent_count} Absent</span>}
                     {session.photo_url && (
-                      <a href={session.photo_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#3b82f6', fontSize: '0.85rem' }}>View Photo ↗</a>
+                      <a href={session.photo_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#3b82f6', fontSize: '0.82rem' }}>Photo ↗</a>
                     )}
+                    <button
+                      className="btn btn-sm btn-red"
+                      onClick={e => handleDelete(session, e)}
+                      disabled={isDeleting}
+                      title="Delete this session"
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px 8px' }}
+                    >
+                      {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                    </button>
                   </div>
                 </div>
 
@@ -1178,12 +1219,22 @@ function RecordsTab({ authHeaders, toast }) {
                         <tbody>
                           {session.students.map((r, idx) => (
                             <tr key={idx}>
-                              <td style={{ fontWeight: 500 }}>{r.name || '—'}</td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {r.image_link
+                                    ? <img src={r.image_link} alt={r.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                                    : <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#10b981' }}>
+                                        {(r.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)}
+                                      </div>
+                                  }
+                                  <span style={{ fontWeight: 500 }}>{r.name || '—'}</span>
+                                </div>
+                              </td>
                               <td><span className="badge badge-blue">{r.prn}</span></td>
                               <td>{r.class} — {r.div}</td>
                               <td>
                                 <span className={`badge ${r.status === 'present' ? 'badge-green' : 'badge-red'}`}>
-                                  {r.status === 'present' ? 'Present' : 'Absent'}
+                                  {r.status === 'present' ? '✓ Present' : '✗ Absent'}
                                 </span>
                               </td>
                             </tr>
