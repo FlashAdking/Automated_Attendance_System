@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sun, Moon, Zap, ArrowRight, Shield, RefreshCw, CheckCircle, XCircle, Users, User, ArrowLeftRight, Camera, Search, Cpu } from 'lucide-react';
+import { STUDENT_API } from '../utils/api';
+import { useRateLimit, formatCooldown } from '../utils/useRateLimit';
 import '../css/LandingPage.css';
 
 /* ───────────────────────────────────────────────
@@ -197,6 +199,9 @@ export default function Home() {
 
   useReveal();
 
+  // Client-side rate limiter: mirror the server's 6/minute limit on /trial
+  const { attempt: tryTrial, blocked: trialBlocked, remainingMs: trialCooldown } = useRateLimit('trial', 6, 60_000);
+
   // Theme toggle
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -222,6 +227,12 @@ export default function Home() {
     if (portraitFiles.length === 0) { setTrialError('Please upload a portrait photo.'); return; }
     if (groupFiles.length === 0) { setTrialError('Please upload at least one group photo.'); return; }
 
+    // Client-side rate guard (matches server 6/min limit)
+    if (!tryTrial()) {
+      setTrialError(`Too many requests — please wait ${formatCooldown(trialCooldown)} before trying again.`);
+      return;
+    }
+
     setTrialError('');
     setTrialLoading(true);
     setTrialResult(null);
@@ -231,12 +242,16 @@ export default function Home() {
     groupFiles.forEach(f => form.append('group_photos', f));
 
     try {
-      const res = await fetch('http://localhost:8000/api/student/trial', {
+      const res = await fetch(`${STUDENT_API}/trial`, {
         method: 'POST',
         body: form,
       });
       if (!res.ok) {
         const err = await res.json();
+        // Surface server 429 gracefully
+        if (res.status === 429) {
+          throw new Error('Rate limit reached on server. Please wait a minute and try again.');
+        }
         throw new Error(err.detail || 'Processing failed');
       }
       const data = await res.json();
@@ -396,12 +411,16 @@ export default function Home() {
             <button
               className="btn-primary"
               onClick={runTrial}
-              disabled={trialLoading}
+              disabled={trialLoading || trialBlocked}
               style={{ fontSize: '1rem', padding: '0.8rem 2rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
             >
               {trialLoading ? (
                 <>
                   <RefreshCw size={16} className="animate-spin" /> Processing...
+                </>
+              ) : trialBlocked ? (
+                <>
+                  <Shield size={16} /> Rate limited — wait {formatCooldown(trialCooldown)}
                 </>
               ) : (
                 <>

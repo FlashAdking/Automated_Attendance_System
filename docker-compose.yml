@@ -1,0 +1,59 @@
+version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  AttendSnap – Backend-only compose
+#  Frontend is deployed independently on Vercel.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MONGODB DATABASE ───────────────────────────────────────────────────────
+  db:
+    image: mongo:6.0
+    container_name: attendsnap_db
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - attendsnap_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FASTAPI BACKEND ────────────────────────────────────────────────────────
+  backend:
+    # In production Jenkins will push the image and the deploy script
+    # pulls it via:  docker pull <IMAGE_VERSIONED>
+    # For local dev you can still build from source:
+    image: ${DOCKER_HUB_USER:-yourdockerhubuser}/attendsnap-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: attendsnap_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://db:27017/attendsnap
+      - JWT_SECRET=${JWT_SECRET}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - attendsnap_network
+
+volumes:
+  mongo_data:
+
+networks:
+  attendsnap_network:
+    driver: bridge

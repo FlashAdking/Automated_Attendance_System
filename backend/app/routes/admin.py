@@ -1,6 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
 from app.logger import logger
 from app.middleware.auth import create_access_token, verify_token
+from app.middleware.rate_limiter import (
+    limiter,
+    LIMIT_AUTH_LOGIN,
+    LIMIT_AUTH_REGISTER,
+    LIMIT_ADMIN_WRITE,
+    LIMIT_ADMIN_READ,
+    LIMIT_ATTENDANCE,
+)
 from app.models.admin_db import AdminDB
 from app.models.user_db import UserDB
 from app.models.attendance_db import AttendanceDB
@@ -40,7 +48,8 @@ class RegisterRequest(BaseModel):
     password: str
 
 @router.post("/login")
-async def login(credentials: LoginRequest, db: AdminDB = Depends(get_admin_db)):
+@limiter.limit(LIMIT_AUTH_LOGIN)
+async def login(request: Request, credentials: LoginRequest, db: AdminDB = Depends(get_admin_db)):
     logger.info(f"Admin login attempt for email: {credentials.email}")
     admin = await db.find_admin_by_email(credentials.email)
 
@@ -78,7 +87,8 @@ async def login(credentials: LoginRequest, db: AdminDB = Depends(get_admin_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/register", status_code=201)
-async def register(payload: RegisterRequest, db: AdminDB = Depends(get_admin_db)):
+@limiter.limit(LIMIT_AUTH_REGISTER)
+async def register(request: Request, payload: RegisterRequest, db: AdminDB = Depends(get_admin_db)):
     """Register a new admin account (password stored as bcrypt hash)."""
     logger.info(f"Admin registration attempt for email: {payload.email}")
 
@@ -105,7 +115,9 @@ async def register(payload: RegisterRequest, db: AdminDB = Depends(get_admin_db)
     return {"message": "Admin registered successfully", "access_token": access_token, "token_type": "bearer"}
 
 @router.post("/students")
+@limiter.limit(LIMIT_ADMIN_WRITE)
 async def add_student(
+    request: Request,
     name: str = Form(...),
     prn: str = Form(...),
     academic_class: str = Form(..., alias="class"),
@@ -160,7 +172,9 @@ async def add_student(
     return {"message": "Student added successfully", "prn": prn, "image_url": image_link}
 
 @router.get("/students")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def get_students(
+    request: Request,
     admin_data: dict = Depends(verify_token),
     db: UserDB = Depends(get_user_db)
 ):
@@ -173,7 +187,9 @@ async def get_students(
     return students
 
 @router.put("/students/{prn}")
+@limiter.limit(LIMIT_ADMIN_WRITE)
 async def update_student(
+    request: Request,
     prn: str,
     name: str = Form(None),
     academic_class: str = Form(None, alias="class"),
@@ -208,7 +224,9 @@ async def update_student(
     return {"message": f"Student {prn} updated successfully", "updated_fields": list(updates.keys())}
 
 @router.delete("/students/{prn}")
+@limiter.limit(LIMIT_ADMIN_WRITE)
 async def remove_student(
+    request: Request,
     prn: str,
     admin_data: dict = Depends(verify_token),
     db: UserDB = Depends(get_user_db)
@@ -221,7 +239,9 @@ async def remove_student(
     return {"message": f"Student {prn} removed successfully"}
 
 @router.get("/attendance")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def view_all_attendance(
+    request: Request,
     admin_data: dict = Depends(verify_token),
     att_db: AttendanceDB = Depends(get_attendance_db),
 ):
@@ -259,7 +279,9 @@ class ToggleAttendanceRequest(BaseModel):
 
 
 @router.post("/mark_attendance/manual/session")
+@limiter.limit(LIMIT_ATTENDANCE)
 async def create_manual_session(
+    request: Request,
     payload: ManualSessionRequest,
     admin_data: dict = Depends(verify_token),
     user_db: UserDB = Depends(get_user_db),
@@ -321,7 +343,9 @@ async def create_manual_session(
 
 
 @router.put("/mark_attendance/manual/toggle/{session_id}")
+@limiter.limit(LIMIT_ATTENDANCE)
 async def toggle_student_attendance(
+    request: Request,
     session_id: str,
     payload: ToggleAttendanceRequest,
     admin_data: dict = Depends(verify_token),
@@ -394,7 +418,9 @@ async def toggle_student_attendance(
 
 
 @router.get("/attendance/{session_id}")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def get_session_by_id(
+    request: Request,
     session_id: str,
     admin_data: dict = Depends(verify_token),
     att_db: AttendanceDB = Depends(get_attendance_db),
@@ -409,7 +435,9 @@ async def get_session_by_id(
 
 
 @router.post("/mark_attendance/manual")
+@limiter.limit(LIMIT_ATTENDANCE)
 async def mark_manual_attendance(
+    request: Request,
     payload: ManualAttendanceRequest,
     admin_data: dict = Depends(verify_token),
     db: UserDB = Depends(get_user_db),
@@ -482,7 +510,9 @@ async def mark_manual_attendance(
 
 
 @router.post("/mark_attendance/image")
+@limiter.limit(LIMIT_ATTENDANCE)
 async def process_image_attendance(
+    request: Request,
     images: List[UploadFile] = File(...),
     date: str = Form(...),
     time_from: str = Form(...),
@@ -663,7 +693,9 @@ async def process_image_attendance(
 
 
 @router.delete("/attendance/{session_id}", status_code=200)
+@limiter.limit(LIMIT_ADMIN_WRITE)
 async def delete_session(
+    request: Request,
     session_id: str,
     admin_data: dict = Depends(verify_token),
     att_db: AttendanceDB = Depends(get_attendance_db),
@@ -680,7 +712,9 @@ async def delete_session(
 
 
 @router.get("/students/{prn}/profile")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def get_student_profile(
+    request: Request,
     prn: str,
     admin_data: dict = Depends(verify_token),
     db: UserDB = Depends(get_user_db),

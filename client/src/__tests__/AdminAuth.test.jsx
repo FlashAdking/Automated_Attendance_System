@@ -5,9 +5,14 @@
  * - Renders both login and register forms correctly
  * - Login success stores token and navigates to dashboard
  * - Login failure shows error message
- * - Register password mismatch shows error
+ * - Login server 429 shows rate-limit message
+ * - Register password mismatch shows error without API call
  * - Register success redirects to login
+ * - Register duplicate email shows API error
+ * - Register server 429 shows rate-limit message
  * - Field validation (empty fields, invalid email)
+ * - Can toggle between login and register modes
+ * - Loading state while submitting
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,8 +26,8 @@ function renderAuth(path = '/admin/login') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/admin/login" element={<AdminAuth />} />
-        <Route path="/admin/register" element={<AdminAuth />} />
+        <Route path="/admin/login"     element={<AdminAuth />} />
+        <Route path="/admin/register"  element={<AdminAuth />} />
         <Route path="/admin/dashboard" element={<div>DASHBOARD</div>} />
       </Routes>
     </MemoryRouter>
@@ -30,14 +35,16 @@ function renderAuth(path = '/admin/login') {
 }
 
 // ── Mock fetch ────────────────────────────────────────────────────────────────
-function mockFetch(ok, data) {
+function mockFetch(ok, data, status = ok ? 200 : 400) {
   global.fetch = vi.fn().mockResolvedValue({
     ok,
+    status,
     json: vi.fn().mockResolvedValue(data),
   });
 }
 
 
+// ═════════════════════════════════════════════════════════════════════════════
 describe('AdminAuth — Login Form', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,7 +79,7 @@ describe('AdminAuth — Login Form', () => {
   });
 
   it('failed login shows error message', async () => {
-    mockFetch(false, { detail: 'Incorrect email or password' });
+    mockFetch(false, { detail: 'Incorrect email or password' }, 401);
     renderAuth('/admin/login');
 
     await userEvent.type(screen.getByLabelText(/email address/i), 'bad@test.com');
@@ -81,6 +88,21 @@ describe('AdminAuth — Login Form', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/incorrect email or password/i)).toBeInTheDocument();
+    });
+  });
+
+  it('server 429 on login shows rate-limit message', async () => {
+    mockFetch(false, { detail: 'Rate limit exceeded' }, 429);
+    renderAuth('/admin/login');
+
+    await userEvent.type(screen.getByLabelText(/email address/i), 'admin@test.com');
+    await userEvent.type(screen.getByPlaceholderText('••••••••'), 'pass');
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      // The component should surface the error detail or a generic "too many" message
+      const errEl = screen.getByText(/rate limit|too many|try again/i);
+      expect(errEl).toBeInTheDocument();
     });
   });
 
@@ -100,7 +122,7 @@ describe('AdminAuth — Login Form', () => {
   it('shows loading state while submitting', async () => {
     global.fetch = vi.fn().mockImplementation(
       () => new Promise(resolve => setTimeout(() => resolve({
-        ok: true, json: () => Promise.resolve({ access_token: 'tok' })
+        ok: true, status: 200, json: () => Promise.resolve({ access_token: 'tok' })
       }), 200))
     );
     renderAuth('/admin/login');
@@ -114,6 +136,7 @@ describe('AdminAuth — Login Form', () => {
 });
 
 
+// ═════════════════════════════════════════════════════════════════════════════
 describe('AdminAuth — Register Form', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -162,7 +185,7 @@ describe('AdminAuth — Register Form', () => {
   });
 
   it('duplicate email shows API error', async () => {
-    mockFetch(false, { detail: 'An admin with this email already exists.' });
+    mockFetch(false, { detail: 'An admin with this email already exists.' }, 400);
     renderAuth('/admin/register');
 
     await userEvent.type(screen.getByLabelText(/full name/i), 'Admin');
@@ -173,6 +196,22 @@ describe('AdminAuth — Register Form', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/already exists/i)).toBeInTheDocument();
+    });
+  });
+
+  it('server 429 on register shows rate-limit message', async () => {
+    mockFetch(false, { detail: 'Rate limit exceeded' }, 429);
+    renderAuth('/admin/register');
+
+    await userEvent.type(screen.getByLabelText(/full name/i), 'Admin');
+    await userEvent.type(screen.getByLabelText(/email address/i), 'spam@test.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'pass1234');
+    await userEvent.type(screen.getByLabelText(/confirm/i), 'pass1234');
+    fireEvent.click(screen.getByRole('button', { name: /register/i }));
+
+    await waitFor(() => {
+      const errEl = screen.getByText(/rate limit|too many|try again/i);
+      expect(errEl).toBeInTheDocument();
     });
   });
 

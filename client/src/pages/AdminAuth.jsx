@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
+import { ADMIN_API } from '../utils/api';
 import '../css/AdminAuth.css';
 
 // Eye Icons as inline components
@@ -82,7 +83,7 @@ export default function AdminAuth() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/admin/login', {
+      const response = await fetch(`${ADMIN_API}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginData),
@@ -110,7 +111,7 @@ export default function AdminAuth() {
     }
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/admin/register', {
+      const response = await fetch(`${ADMIN_API}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sun, Moon, User, Search, CheckCircle2, XCircle, CalendarRange,
-  ArrowLeft, BookOpen, Phone, Mail, ChevronDown, ChevronUp, Percent
+  ArrowLeft, BookOpen, Phone, Mail, ChevronDown, ChevronUp, Percent, Shield
 } from 'lucide-react';
 import '../css/StudentPortal.css';
 
-const API = 'http://localhost:8000/api/student';
+import { STUDENT_API as API } from '../utils/api';
+import { useRateLimit, formatCooldown } from '../utils/useRateLimit';
+
 
 /* ── Tiny donut SVG drawn in-browser ── */
 function DonutChart({ percentage }) {
@@ -83,6 +85,9 @@ export default function StudentPortal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Client-side rate guard: 20 lookups per minute (mirrors server limit)
+  const { attempt: tryLookup, blocked: lookupBlocked, remainingMs: lookupCooldown } = useRateLimit('student_lookup', 20, 60_000);
+
   /* Result state */
   const [profile, setProfile] = useState(null);
   const [historyFilter, setHistoryFilter] = useState('all');
@@ -99,6 +104,13 @@ export default function StudentPortal() {
     setError('');
     setProfile(null);
     if (!prn.trim() || !dob) { setError('Both PRN and Date of Birth are required.'); return; }
+
+    // Client-side rate guard
+    if (!tryLookup()) {
+      setError(`Too many lookups — please wait ${formatCooldown(lookupCooldown)}.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams({ prn: prn.trim(), dob });
@@ -109,6 +121,8 @@ export default function StudentPortal() {
         setHistoryFilter('all');
         setHistorySearch('');
         setShowAll(false);
+      } else if (res.status === 429) {
+        setError('Too many requests from your network. Please wait a moment.');
       } else {
         setError(data.detail || 'Could not find your record. Check PRN and Date of Birth.');
       }
@@ -196,10 +210,12 @@ export default function StudentPortal() {
               {error && (
                 <div className="sp-error">{error}</div>
               )}
-              <button type="submit" className="sp-btn-primary" disabled={loading}>
+              <button type="submit" className="sp-btn-primary" disabled={loading || lookupBlocked}>
                 {loading
                   ? <><span className="sp-spinner" /> Looking up…</>
-                  : <><Search size={16} /> View My Attendance</>}
+                  : lookupBlocked
+                    ? <><Shield size={16} /> Wait {formatCooldown(lookupCooldown)}</>
+                    : <><Search size={16} /> View My Attendance</>}
               </button>
             </form>
             <div className="sp-lookup-hint">

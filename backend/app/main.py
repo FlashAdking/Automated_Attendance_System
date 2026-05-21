@@ -1,16 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 import os
 import uvicorn
 
 from app.logger import logger
+from app.middleware.rate_limiter import limiter
 from app.routes.admin import router as admin_router
 from app.routes.student import router as student_router
 
 load_dotenv()
 
 app = FastAPI(title="AttendSnap API", description="Automated Attendance System using Face Recognition")
+
+# ── Rate Limiter ──────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Allow the Vite dev server (and any localhost port during development).
@@ -22,6 +31,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        os.getenv("FRONTEND_URL", ""),      # e.g. https://attendsnap.vercel.app
     ],
     allow_credentials=True,
     allow_methods=["*"],

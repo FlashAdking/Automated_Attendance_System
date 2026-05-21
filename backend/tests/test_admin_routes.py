@@ -123,7 +123,7 @@ class TestGetStudents:
 
     def test_requires_auth(self, client):
         res = client.get("/api/admin/students")
-        assert res.status_code == 403
+        assert res.status_code == 401
 
     def test_returns_empty_list(self, client):
         _override(user_db=make_mock_user_db(all_users=[]))
@@ -189,7 +189,7 @@ class TestDeleteStudent:
 
     def test_delete_requires_auth(self, client):
         res = client.delete("/api/admin/students/PRN001")
-        assert res.status_code == 403
+        assert res.status_code == 401
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -219,7 +219,7 @@ class TestGetAttendance:
 
     def test_requires_auth(self, client):
         res = client.get("/api/admin/attendance")
-        assert res.status_code == 403
+        assert res.status_code == 401
 
 
 class TestGetSessionById:

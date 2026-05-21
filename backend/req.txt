@@ -15,3 +15,5 @@ resend
 matplotlib
 bcrypt
 keras
+slowapi
+limits

@@ -6,7 +6,8 @@ import {
 import '../css/AdminDashboard.css';
 
 /* ─── API base ─── */
-const API = 'http://localhost:8000/api/admin';
+import { ADMIN_API as API } from '../utils/api';
+
 
 /* ─── Tiny hook to keep auth header ready ─── */
 function useAuth() {

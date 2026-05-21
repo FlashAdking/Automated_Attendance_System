@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import shutil
 import os
@@ -9,6 +9,7 @@ from tempfile import NamedTemporaryFile
 from typing import List
 from app.logger import logger
 from app.middleware.auth import verify_token
+from app.middleware.rate_limiter import limiter, LIMIT_STUDENT_LOOKUP, LIMIT_TRIAL, LIMIT_ADMIN_READ
 from app.database import get_user_db
 from app.models.user_db import UserDB
 
@@ -17,7 +18,9 @@ router = APIRouter(prefix="/api/student", tags=["Student"])
 
 # ── Public Student Self-Service Endpoint ────────────────────────────────────
 @router.post("/lookup")
+@limiter.limit(LIMIT_STUDENT_LOOKUP)
 async def student_lookup(
+    request: Request,
     prn: str,
     dob: str,
     db: UserDB = Depends(get_user_db),
@@ -152,7 +155,9 @@ def build_query_embedding(portrait_paths: list, get_image_embeddings, facenet_mo
 
 
 @router.get("/attendance/summary/{prn}")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def get_attendance_summary(
+    request: Request,
     prn: str,
     db: UserDB = Depends(get_user_db),
 ):
@@ -180,7 +185,9 @@ async def get_attendance_summary(
 
 
 @router.get("/attendance/history/{prn}")
+@limiter.limit(LIMIT_ADMIN_READ)
 async def get_attendance_history(
+    request: Request,
     prn: str,
     db: UserDB = Depends(get_user_db),
 ):
@@ -197,7 +204,9 @@ async def get_attendance_history(
 
 
 @router.post("/trial")
+@limiter.limit(LIMIT_TRIAL)
 async def public_trial_face_recognition(
+    request: Request,
     portraits: List[UploadFile] = File(..., description="1 or 2 portrait/selfie images (different angles → better accuracy)"),
     group_photos: List[UploadFile] = File(..., description="1 or 2 group photos to search in"),
 ):

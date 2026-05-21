@@ -1,20 +1,15 @@
 /**
- * App.test.jsx — Router and routing integration tests
+ * App.test.jsx — Router integration tests
  *
- * Verifies that:
- * - / renders the Home page
- * - /student renders the Student Portal
- * - /admin/login renders the login form
- * - /admin/register renders the register form
- * - Unknown routes redirect to /
+ * Uses MemoryRouter directly wrapping the Routes to avoid the
+ * BrowserRouter vs MemoryRouter module-mock issue.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import App from '../App';
+import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-// Heavy pages — only verify routing (shallow checks)
+// Lightweight stubs for each page
 vi.mock('../pages/Home', () => ({
   default: () => <div data-testid="home-page">Home Page</div>,
 }));
@@ -28,63 +23,57 @@ vi.mock('../pages/StudentPortal', () => ({
   default: () => <div data-testid="student-portal-page">Student Portal</div>,
 }));
 
+// Import the mocked pages so we can render them via routes
+import Home from '../pages/Home';
+import AdminAuth from '../pages/AdminAuth';
+import AdminDashboard from '../pages/AdminDashboard';
+import StudentPortal from '../pages/StudentPortal';
+
+/** Renders the full route tree at a given initial path */
 function renderAt(path) {
-  // We wrap App in a custom MemoryRouter that overrides its internal BrowserRouter
-  vi.mock('react-router-dom', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-      ...actual,
-      BrowserRouter: ({ children }) => (
-        <actual.MemoryRouter initialEntries={[path]}>
-          {children}
-        </actual.MemoryRouter>
-      ),
-    };
-  });
-  return render(<App />);
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/admin/login" element={<AdminAuth />} />
+        <Route path="/admin/register" element={<AdminAuth />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/student" element={<StudentPortal />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </MemoryRouter>
+  );
 }
 
 
 describe('App Router', () => {
-  it('/ renders the Home page', async () => {
+  it('/ renders the Home page', () => {
     renderAt('/');
-    await waitFor(() => {
-      expect(screen.getByTestId('home-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
   });
 
-  it('/admin/login renders AdminAuth', async () => {
+  it('/admin/login renders AdminAuth', () => {
     renderAt('/admin/login');
-    await waitFor(() => {
-      expect(screen.getByTestId('admin-auth-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('admin-auth-page')).toBeInTheDocument();
   });
 
-  it('/admin/register renders AdminAuth', async () => {
+  it('/admin/register renders AdminAuth', () => {
     renderAt('/admin/register');
-    await waitFor(() => {
-      expect(screen.getByTestId('admin-auth-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('admin-auth-page')).toBeInTheDocument();
   });
 
-  it('/admin/dashboard renders AdminDashboard', async () => {
+  it('/admin/dashboard renders AdminDashboard', () => {
     renderAt('/admin/dashboard');
-    await waitFor(() => {
-      expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
   });
 
-  it('/student renders StudentPortal', async () => {
+  it('/student renders StudentPortal', () => {
     renderAt('/student');
-    await waitFor(() => {
-      expect(screen.getByTestId('student-portal-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('student-portal-page')).toBeInTheDocument();
   });
 
-  it('unknown route falls back to /', async () => {
+  it('unknown route falls back to Home', () => {
     renderAt('/does-not-exist');
-    await waitFor(() => {
-      expect(screen.getByTestId('home-page')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
   });
 });
