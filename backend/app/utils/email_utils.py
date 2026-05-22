@@ -1,38 +1,41 @@
 """
 Email notification service for AttendSnap.
-Uses Resend API for reliable email delivery with premium HTML templates
-and matplotlib-generated attendance statistics charts.
+Uses Gmail SMTP with App Password for direct email delivery,
+with premium HTML templates and matplotlib-generated charts.
 
-Setup:
-  In .env, add:
-    RESEND_API_KEY=re_xxxxx
+Setup (.env):
+  EMAIL_SENDER=yourname@gmail.com
+  EMAIL_PASSWORD=xxxx xxxx xxxx xxxx      # Gmail App Password
 """
 
 import os
 import io
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import base64
 from datetime import datetime, timezone
 
-import resend
+
 import matplotlib
-matplotlib.use("Agg")  # Non-interactive backend — safe for server use
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from app.logger import logger
 from app.utils.cloudinary_helper import upload_image_to_cloudinary
 
 
-# ── Resend Configuration ──────────────────────────────────────────────────────
-resend.api_key = os.getenv("RESEND_API_KEY", "")
 
-# The "from" address — use onboarding@resend.dev for testing,
-# or your verified domain (e.g. noreply@yourdomain.com)
-FROM_EMAIL = os.getenv("EMAIL_FROM", "AttendSnap <onboarding@resend.dev>")
+# SMTP Configuration (Gmail)
+SMTP_SENDER = os.getenv("EMAIL_SENDER", "")
+SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════ 
 #  MATPLOTLIB CHART GENERATION (LIGHT THEME)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════ 
 
 def _generate_attendance_donut_chart(present: int, absent: int, student_name: str) -> str:
     """Generate a premium light-themed donut chart and upload to Cloudinary."""
@@ -319,8 +322,9 @@ def _build_attendance_html(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RESEND EMAIL SENDER
+#  GMAIL SMTP SENDER
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def send_attendance_email(
     to_email: str,
@@ -333,17 +337,18 @@ def send_attendance_email(
     method: str = "ai",
     attendance_history: list[dict] = None,
     note: str = "",
+    smtp_server: smtplib.SMTP = None,
 ) -> bool:
     """
-    Send an attendance confirmation email using Resend API.
+    Send an attendance confirmation email via Gmail SMTP.
     Charts are generated, hosted on Cloudinary, and embedded in the HTML.
-    """
-    api_key = os.getenv("RESEND_API_KEY", "")
-    if not api_key:
-        logger.warning("RESEND_API_KEY not set in .env — skipping email")
-        return False
 
-    resend.api_key = api_key
+    If smtp_server is provided, reuses that connection instead of opening a new one.
+    This prevents Google from rate-limiting when sending to many students at once.
+    """
+    if not SMTP_SENDER or not SMTP_PASSWORD:
+        logger.warning("EMAIL_SENDER / EMAIL_PASSWORD not set in .env — skipping email")
+        return False
 
     if not to_email:
         return False
@@ -388,16 +393,25 @@ def send_attendance_email(
         if subject_name:
             subject_line = f"[{subject_name}] " + subject_line
 
-        # ── Send via Resend (No inline attachments, strictly URL based) ──
-        params = {
-            "from": FROM_EMAIL,
-            "to": [to_email],
-            "subject": subject_line,
-            "html": html_body,
-        }
+        # ── Build MIME Message ──
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"AttendSnap <{SMTP_SENDER}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject_line
+        msg.attach(MIMEText(html_body, "html"))
 
-        result = resend.Emails.send(params)
-        logger.info(f"Attendance email sent to {to_email} (Resend ID: {result.get('id', 'N/A')})")
+        # ── Send via Gmail SMTP ──
+        if smtp_server:
+            # Reuse existing connection (bulk mode)
+            smtp_server.sendmail(SMTP_SENDER, to_email, msg.as_string())
+        else:
+            # Open a fresh connection (single-email mode)
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_SENDER, SMTP_PASSWORD)
+                server.sendmail(SMTP_SENDER, to_email, msg.as_string())
+
+        logger.info(f"Attendance email sent to {to_email}")
         return True
 
     except Exception as e:
@@ -415,43 +429,61 @@ def send_attendance_emails_bulk(
     note: str = "",
     all_attendance_records: dict = None,
 ) -> dict:
-    """Send attendance emails to all processed students."""
+    """
+    Send attendance emails to all processed students.
+    Opens a single SMTP connection and reuses it for every email
+    to avoid Google rate-limiting on rapid successive logins.
+    """
     sent = 0
     failed = 0
 
     if all_attendance_records is None:
         all_attendance_records = {}
 
-    for s in students:
-        email = s.get("email")
-        name = s.get("name", "Student")
-        prn = s.get("prn", "")
-        student_status = s.get("status", "present")
+    if not SMTP_SENDER or not SMTP_PASSWORD:
+        logger.warning("EMAIL_SENDER / EMAIL_PASSWORD not set — skipping bulk email")
+        return {"sent": 0, "failed": len(students)}
 
-        if not email:
-            failed += 1
-            continue
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_SENDER, SMTP_PASSWORD)
+            logger.info(f"SMTP connection opened — sending to {len(students)} students")
 
-        # Get this student's historical attendance for the chart
-        history = all_attendance_records.get(prn, [])
+            for s in students:
+                email = s.get("email")
+                name = s.get("name", "Student")
+                prn = s.get("prn", "")
+                student_status = s.get("status", "present")
 
-        ok = send_attendance_email(
-            to_email=email,
-            student_name=name,
-            status=student_status,
-            session_date=session_date,
-            time_from=time_from,
-            time_to=time_to,
-            subject_name=subject_name,
-            method=method,
-            attendance_history=history,
-            note=note,
-        )
+                if not email:
+                    failed += 1
+                    continue
 
-        if ok:
-            sent += 1
-        else:
-            failed += 1
+                history = all_attendance_records.get(prn, [])
+
+                ok = send_attendance_email(
+                    to_email=email,
+                    student_name=name,
+                    status=student_status,
+                    session_date=session_date,
+                    time_from=time_from,
+                    time_to=time_to,
+                    subject_name=subject_name,
+                    method=method,
+                    attendance_history=history,
+                    note=note,
+                    smtp_server=server,
+                )
+
+                if ok:
+                    sent += 1
+                else:
+                    failed += 1
+
+    except Exception as e:
+        logger.error(f"SMTP bulk connection failed: {e}")
+        failed += len(students) - sent - failed
 
     logger.info(f"Email notifications: {sent} sent, {failed} failed")
     return {"sent": sent, "failed": failed}
