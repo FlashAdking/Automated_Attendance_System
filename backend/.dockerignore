@@ -31,3 +31,9 @@ htmlcov/
 
 # Assets / temp uploads (large files not needed in image)
 assets/
+
+# .h5 model — production uses .onnx via onnxruntime (no tensorflow in image)
+app/face_recognition/ML_models/*.h5
+
+# One-time conversion scripts — not needed at runtime
+scripts/

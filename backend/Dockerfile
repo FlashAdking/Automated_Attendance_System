@@ -1,17 +1,13 @@
 # ── Stage 1: Builder ──────────────────────────────────────────────────────────
-# Install heavy ML dependencies in a separate layer so they are cached
+# Installs Python deps with no-cache to keep the layer lean.
+# No TensorFlow — we use onnxruntime only (50 MB vs 1.2 GB).
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# System packages required for OpenCV, TensorFlow, face libs
+# Only libglib2.0-0 is needed at build time for opencv-python-headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
         libglib2.0-0 \
-        libsm6 \
-        libxext6 \
-        libxrender-dev \
-        libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY req.txt .
@@ -19,23 +15,23 @@ RUN pip install --no-cache-dir --prefix=/install -r req.txt
 
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# Minimal runtime image — only what's needed to run the app.
+# Render free tier: 512 MB RAM, 0.1 CPU.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Runtime system libs (no build tools needed)
+# Only runtime C libs needed by opencv-headless and onnxruntime
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
-        libsm6 \
-        libxext6 \
-        libxrender-dev \
-        libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy application source
+# Copy application source (includes the pre-converted .onnx model file)
+# The .onnx file MUST be committed to git before building this image.
+# Run scripts/convert_to_onnx.py on your dev machine first.
 COPY . .
 
 # Expose FastAPI port
@@ -45,5 +41,4 @@ EXPOSE 8000
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Start Uvicorn (no --reload in production)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
