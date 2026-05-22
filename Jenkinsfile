@@ -52,12 +52,19 @@ pipeline {
         }
 
         // ── 2. Lint / Static checks ───────────────────────────────────────────
+        // ── 2. Lint / Static checks ───────────────────────────────────────────
         stage('Lint') {
             steps {
                 dir(BACKEND_DIR) {
                     sh '''
-                        python3 -m pip install --quiet flake8
-                        # W503 = line break before binary operator (style preference, ignore it)
+                        # Create a virtual environment named 'venv'
+                        python3 -m venv attend_snap_venv
+                        
+                        # Activate it
+                        . attend_snap_venv/bin/activate
+                        
+                        # Install and run flake8 inside the isolated environment
+                        pip install --quiet flake8
                         flake8 app/ --max-line-length=120 --ignore=W503 || true
                     '''
                 }
@@ -69,16 +76,21 @@ pipeline {
             steps {
                 dir(BACKEND_DIR) {
                     sh '''
-                        python3 -m pip install --quiet pytest pytest-asyncio httpx
+                        # Activate the same virtual environment created in Stage 2
+                        . attend_snap_venv/bin/activate
+                        
+                        # Install testing libraries and your backend requirements
+                        pip3 install --quiet pytest pytest-asyncio httpx
                         pip3 install --quiet -r req.txt
+                        
+                        # Run tests
                         pytest tests/ -v --tb=short || true
                     '''
                 }
             }
             post {
                 always {
-                    // Publish JUnit XML results if you use pytest-junit
-                    junit allowEmptyResults: true, testResults: 'backend/test-results/*.xml'
+                    junit allowEmptyResults: true, testResults: 'test-results/*.xml'
                 }
             }
         }
@@ -135,7 +147,6 @@ pipeline {
             when {
                 anyOf {
                     branch 'main'
-                    branch 'master'
                 }
             }
             steps {
