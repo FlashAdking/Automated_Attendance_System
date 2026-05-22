@@ -34,11 +34,8 @@ pipeline {
         timestamps()
     }
 
-    // ── Trigger: push to main / master ───────────────────────────────────────
-    triggers {
-        // Poll SCM every minute for changes
-        pollSCM('* * * * *')
-    }
+    // ── Trigger: manual only ─────────────────────────────────────────────────
+    // Run by clicking "Build Now" in the Jenkins UI — no automatic scheduling.
 
     // ═════════════════════════════════════════════════════════════════════════
     stages {
