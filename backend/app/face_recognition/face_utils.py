@@ -14,30 +14,60 @@ facenet_model = None
 def load_models():
     global mtcnn_detector, facenet_model
     if mtcnn_detector is None or facenet_model is None:
-        print("Loading MTCNN and FaceNet models...")
         from mtcnn import MTCNN
-        from keras.models import load_model
-        import keras
-
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        MODEL_PATH = os.path.join(BASE_DIR, "ML_models", "facenet_embedder_model.h5")
-
-        # The model has two Lambda layers that Keras 3 cannot auto-resolve from
-        # the serialised function names. We supply both explicitly.
-        import tensorflow as tf
-
-        def scaling(x, scale=1.0 / 255):
-            return x * scale
-
-        def l2_normalize(x, axis=None, epsilon=1e-12):
-            return tf.math.l2_normalize(x, axis=axis, epsilon=epsilon)
-
         mtcnn_detector = MTCNN()
-        facenet_model = load_model(
-            MODEL_PATH,
-            custom_objects={"scaling": scaling, "l2_normalize": l2_normalize},
-        )
-        print("Models loaded successfully.")
+
+        BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+        ONNX_PATH  = os.path.join(BASE_DIR, "ML_models", "facenet_embedder_model.onnx")
+        H5_PATH    = os.path.join(BASE_DIR, "ML_models", "facenet_embedder_model.h5")
+
+        if os.path.exists(ONNX_PATH):
+            # ── Fast path: onnxruntime (~50 MB) instead of tensorflow (~1.2 GB) ──
+            import onnxruntime as ort
+            print("Loading FaceNet model via onnxruntime...")
+            sess_options = ort.SessionOptions()
+            sess_options.inter_op_num_threads = 2
+            sess_options.intra_op_num_threads = 2
+            _session = ort.InferenceSession(ONNX_PATH, sess_options=sess_options,
+                                            providers=["CPUExecutionProvider"])
+            _input_name  = _session.get_inputs()[0].name
+            _output_name = _session.get_outputs()[0].name
+
+            # Wrap as a duck-typed object with a .predict() method so the
+            # rest of the codebase (genrate_embedings.py) needs zero changes.
+            class _OnnxModel:
+                def predict(self, x, verbose=0):
+                    import numpy as np
+                    return _session.run(
+                        [_output_name],
+                        {_input_name: x.astype(np.float32)}
+                    )[0]
+
+            facenet_model = _OnnxModel()
+            print("FaceNet model loaded via onnxruntime ✓")
+
+        elif os.path.exists(H5_PATH):
+            # ── Fallback: TensorFlow (used during dev before conversion) ─────────
+            import tensorflow as tf
+            print("Loading FaceNet model via tensorflow (fallback — convert to ONNX to save ~1.1 GB)...")
+
+            def scaling(x, scale=1.0 / 255):
+                return x * scale
+
+            def l2_normalize(x, axis=None, epsilon=1e-12):
+                return tf.math.l2_normalize(x, axis=axis, epsilon=epsilon)
+
+            facenet_model = tf.keras.models.load_model(
+                H5_PATH,
+                custom_objects={"scaling": scaling, "l2_normalize": l2_normalize},
+            )
+            print("FaceNet model loaded via tensorflow ✓")
+
+        else:
+            raise FileNotFoundError(
+                f"No model found. Expected ONNX at:\n  {ONNX_PATH}\nor H5 at:\n  {H5_PATH}"
+            )
+
 
 def process_student_image(file: UploadFile) -> list[float]:
     """
