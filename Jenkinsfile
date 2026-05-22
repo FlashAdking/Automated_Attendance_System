@@ -109,10 +109,6 @@ pipeline {
 
         // ── 5. Push to Docker Hub ─────────────────────────────────────────────
         stage('Push to Docker Hub') {
-            when {
-                // Match both 'main' (GitHub Actions style) and 'origin/main' (local Jenkins)
-                expression { env.GIT_BRANCH ==~ /.*main/ || env.GIT_BRANCH ==~ /.*master/ }
-            }
             steps {
                 // Use withCredentials + single-quoted sh to prevent secret leaking in logs
                 withCredentials([usernamePassword(
@@ -141,9 +137,6 @@ pipeline {
 
         // ── 6. Trigger Cloud Deployment (Render.com) ──────────────────────────
         stage('Trigger Cloud Deploy') {
-            when {
-                expression { env.GIT_BRANCH ==~ /.*main/ }
-            }
             steps {
                 script {
                     echo "🚀 Triggering Render deployment..."
