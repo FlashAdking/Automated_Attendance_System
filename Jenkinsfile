@@ -164,14 +164,24 @@ pipeline {
             }
         }
 
-        // ── 7. Cleanup local images ───────────────────────────────────────────
+        // ── 7. Cleanup — runs after successful push ───────────────────────────
         stage('Cleanup') {
             steps {
-                sh """
-                    docker rmi ${IMAGE_VERSIONED} ${IMAGE_LATEST} || true
-                    docker image prune -f || true
-                    echo "🧹 Local machine images cleaned up."
-                """
+                sh '''
+                    echo "🧹 Removing built images..."
+                    docker image rm "${IMAGE_VERSIONED}" "${IMAGE_LATEST}" 2>/dev/null || true
+
+                    echo "🧹 Pruning dangling images & layers..."
+                    docker image prune -f
+
+                    echo "🧹 Pruning unused build cache..."
+                    docker builder prune -f
+
+                    echo "🧹 Pruning unused networks..."
+                    docker network prune -f
+
+                    echo "✅ Docker environment fully cleaned."
+                '''
             }
         }
     }
@@ -179,13 +189,14 @@ pipeline {
     // ── Post-pipeline notifications ───────────────────────────────────────────
     post {
         success {
-            echo "🎉 Pipeline SUCCESS – AttendSnap backend ${IMAGE_VERSIONED} deployed."
+            echo "🎉 Pipeline SUCCESS – image pushed and Docker environment cleaned."
         }
         failure {
-            echo "💥 Pipeline FAILED – check build console output logs."
+            // Images are intentionally kept on failure for debugging
+            echo "💥 Pipeline FAILED – Docker images kept for inspection. Check console output."
         }
         always {
-            // Cleans the workspace directory inside the active node executor block
+            // Wipe Jenkins workspace regardless of build outcome
             cleanWs()
         }
     }
