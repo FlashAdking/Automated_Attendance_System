@@ -22,16 +22,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allow the Vite dev server (and any localhost port during development).
-# For production, replace allow_origins with your actual frontend domain.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-        os.getenv("FRONTEND_URL", ""),      # e.g. https://attendsnap.vercel.app
+        os.getenv("FRONTEND_URL", ""),
     ],
     allow_credentials=True,
     allow_methods=["*"],
