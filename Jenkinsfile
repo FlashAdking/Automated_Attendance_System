@@ -75,8 +75,10 @@ pipeline {
                         attend_snap_venv/bin/pip3 install --quiet pytest pytest-asyncio httpx
                         attend_snap_venv/bin/pip3 install --quiet -r req.txt
 
-                        # Run tests
-                        attend_snap_venv/bin/pytest tests/ -v --tb=short || true
+                        # Run tests — output JUnit XML so Jenkins can display results
+                        mkdir -p test-results
+                        attend_snap_venv/bin/pytest tests/ -v --tb=short \
+                            --junitxml=test-results/results.xml || true
                     '''
                 }
             }
@@ -108,24 +110,27 @@ pipeline {
         // ── 5. Push to Docker Hub ─────────────────────────────────────────────
         stage('Push to Docker Hub') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                }
+                // Match both 'main' (GitHub Actions style) and 'origin/main' (local Jenkins)
+                expression { env.GIT_BRANCH ==~ /.*main/ || env.GIT_BRANCH ==~ /.*master/ }
             }
             steps {
-                sh """
-                    echo "📤 Logging in to Docker Hub..."
-                    echo "${DOCKER_CREDS_PSW}" | docker login -u "${DOCKER_CREDS_USR}" --password-stdin
+                // Use withCredentials + single-quoted sh to prevent secret leaking in logs
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'HUB_USER',
+                    passwordVariable: 'HUB_PASS'
+                )]) {
+                    sh '''
+                        echo "📤 Logging in to Docker Hub..."
+                        echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
 
-                    echo "📤 Pushing ${IMAGE_VERSIONED} ..."
-                    docker push ${IMAGE_VERSIONED}
+                        echo "📤 Pushing images..."
+                        docker push "$HUB_USER/attendsnap:$BUILD_NUMBER"
+                        docker push "$HUB_USER/attendsnap:latest"
 
-                    echo "📤 Pushing ${IMAGE_LATEST} ..."
-                    docker push ${IMAGE_LATEST}
-
-                    echo "✅ Images pushed successfully."
-                """
+                        echo "✅ Images pushed successfully."
+                    '''
+                }
             }
             post {
                 always {
@@ -137,28 +142,24 @@ pipeline {
         // ── 6. Trigger Cloud Deployment (Render.com) ──────────────────────────
         stage('Trigger Cloud Deploy') {
             when {
-                anyOf {
-                    branch 'main'
-                }
+                expression { env.GIT_BRANCH ==~ /.*main/ }
             }
             steps {
                 script {
-                    echo "🚀 Triggering deployment of ${IMAGE_VERSIONED} on Render..."
-                    
-                    // Render includes authorization within the hook URL parameter string securely
-                    sh """
-                        HTTP_STATUS=\$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" --max-time 30 "${DEPLOY_WEBHOOK}")
-                        
-                        echo "Render API Gateway Response Code: \${HTTP_STATUS}"
-                        cat /tmp/deploy_response.txt
-                        
-                        if [ "\${HTTP_STATUS}" -lt 200 ] || [ "\${HTTP_STATUS}" -ge 300 ]; then
-                            echo "❌ Render deployment webhook failed with HTTP status \${HTTP_STATUS}"
-                            exit 1
-                        fi
-                        
-                        echo "✅ Render deployment sequence initialized cleanly."
-                    """
+                    echo "🚀 Triggering Render deployment..."
+                    // DEPLOY_WEBHOOK is a secret URL — use single-quoted sh + env var
+                    withCredentials([string(credentialsId: 'cloud-deploy-webhook-url', variable: 'HOOK_URL')]) {
+                        sh '''
+                            HTTP_STATUS=$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" --max-time 30 "$HOOK_URL")
+                            echo "Render response: ${HTTP_STATUS}"
+                            cat /tmp/deploy_response.txt
+                            if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -ge 300 ]; then
+                                echo "❌ Render webhook failed: ${HTTP_STATUS}"
+                                exit 1
+                            fi
+                            echo "✅ Render deployment triggered."
+                        '''
+                    }
                 }
             }
         }
