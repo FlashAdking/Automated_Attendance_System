@@ -6,13 +6,13 @@
 
 pipeline {
 
-    // Run on any available agent (change to a label if you have dedicated nodes)
+    // Run on any available agent
     agent any
 
     // ── Environment / Credentials ────────────────────────────────────────────
     environment {
-        // Docker Hub (or GHCR) image name  –  set DOCKER_HUB_USER in Jenkins globals
-        IMAGE_NAME     = "${env.DOCKER_HUB_USER}/attendsnap-backend"
+        // Docker Hub image name  –  ensure DOCKER_HUB_USER is set in Jenkins globals
+        IMAGE_NAME     = "${env.DOCKER_HUB_USER}/attendsnap"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"          // e.g. "42"
         IMAGE_LATEST   = "${IMAGE_NAME}:latest"
         IMAGE_VERSIONED= "${IMAGE_NAME}:${IMAGE_TAG}"
@@ -20,8 +20,7 @@ pipeline {
         // Credentials stored in Jenkins Credentials Store
         // Add these via: Jenkins → Manage → Credentials
         DOCKER_CREDS   = credentials('dockerhub-credentials')   // username+password
-        DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') // Secret text – your cloud webhook / deploy URL
-        DEPLOY_SECRET  = credentials('cloud-deploy-secret')     // Secret text – HMAC or bearer token
+        DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') // Secret text – Your Render deploy hook URL
 
         // Paths inside the repo
         BACKEND_DIR    = 'backend'
@@ -37,8 +36,7 @@ pipeline {
 
     // ── Trigger: push to main / master ───────────────────────────────────────
     triggers {
-        // Poll SCM every minute (replace with GitHub webhook for real-time)
-        // To use a webhook instead: configure GitHub → Webhooks → Jenkins URL
+        // Poll SCM every minute for changes
         pollSCM('* * * * *')
     }
 
@@ -49,11 +47,11 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "✅ Checked out branch: ${env.GIT_BRANCH}  |  commit: ${env.GIT_COMMIT?.take(8)}"
+                echo "✅ Checked out branch: ${env.GIT_BRANCH}"
             }
         }
 
-        // ── 2. Lint / Static checks (optional but recommended) ────────────────
+        // ── 2. Lint / Static checks ───────────────────────────────────────────
         stage('Lint') {
             steps {
                 dir(BACKEND_DIR) {
@@ -105,10 +103,10 @@ pipeline {
 
         // ── 5. Push to Docker Hub ─────────────────────────────────────────────
         stage('Push to Docker Hub') {
-            // Only push when building the main/master branch
             when {
                 anyOf {
                     branch 'main'
+                    branch 'master'
                 }
             }
             steps {
@@ -132,19 +130,7 @@ pipeline {
             }
         }
 
-        // ── 6. Trigger Cloud Deployment ───────────────────────────────────────
-        //
-        //  This stage fires a webhook / REST call to your cloud server telling it:
-        //    "Pull the new image and restart the container."
-        //
-        //  Supported patterns (uncomment/adapt the one that matches your cloud):
-        //
-        //  A) Generic webhook  (custom deploy script on the server)
-        //  B) Render.com       deploy hook
-        //  C) Fly.io           (via flyctl over SSH / API)
-        //  D) Railway          (via API)
-        //
-        // ─────────────────────────────────────────────────────────────────────
+        // ── 6. Trigger Cloud Deployment (Render.com) ──────────────────────────
         stage('Trigger Cloud Deploy') {
             when {
                 anyOf {
@@ -154,55 +140,22 @@ pipeline {
             }
             steps {
                 script {
-                    echo "🚀 Triggering deployment of ${IMAGE_VERSIONED} on cloud server..."
-
-                    // ── A) Generic Webhook ────────────────────────────────────
-                    // Your server exposes a small deploy endpoint (see deploy.sh below).
-                    // The DEPLOY_WEBHOOK secret holds the full URL, e.g.
-                    //   https://yourserver.com:9000/deploy
-                    // The DEPLOY_SECRET is sent as a Bearer token so the endpoint
-                    // can verify the call really came from Jenkins.
+                    echo "🚀 Triggering deployment of ${IMAGE_VERSIONED} on Render..."
+                    
+                    // Render includes authorization within the hook URL parameter string securely
                     sh """
-                        HTTP_STATUS=\$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" \
-                            --max-time 30 \
-                            -X POST "${DEPLOY_WEBHOOK}" \
-                            -H "Authorization: Bearer ${DEPLOY_SECRET}" \
-                            -H "Content-Type: application/json" \
-                            -d '{
-                                    "service":   "attendsnap-backend",
-                                    "image":     "${IMAGE_VERSIONED}",
-                                    "tag":       "${IMAGE_TAG}",
-                                    "commit":    "${env.GIT_COMMIT}",
-                                    "branch":    "${env.GIT_BRANCH}"
-                                }')
-
-                        echo "Cloud response (HTTP \${HTTP_STATUS}):"
+                        HTTP_STATUS=\$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" --max-time 30 "${DEPLOY_WEBHOOK}")
+                        
+                        echo "Render API Gateway Response Code: \${HTTP_STATUS}"
                         cat /tmp/deploy_response.txt
-
+                        
                         if [ "\${HTTP_STATUS}" -lt 200 ] || [ "\${HTTP_STATUS}" -ge 300 ]; then
-                            echo "❌ Deployment webhook returned HTTP \${HTTP_STATUS}"
+                            echo "❌ Render deployment webhook failed with HTTP status \${HTTP_STATUS}"
                             exit 1
                         fi
-
-                        echo "✅ Deploy triggered successfully."
+                        
+                        echo "✅ Render deployment sequence initialized cleanly."
                     """
-
-                    // ── B) Render.com deploy hook (alternative) ───────────────
-                    // Uncomment if you use Render. DEPLOY_WEBHOOK = Render deploy hook URL.
-                    //
-                    // sh """
-                    //     curl -s --max-time 30 "${DEPLOY_WEBHOOK}" && echo "Render deploy triggered."
-                    // """
-
-                    // ── C) Fly.io via API (alternative) ──────────────────────
-                    // Uncomment if you use Fly.io. DEPLOY_SECRET = Fly API token.
-                    //
-                    // sh """
-                    //     curl -s -X POST "https://api.machines.dev/v1/apps/attendsnap-backend/machines" \
-                    //         -H "Authorization: Bearer ${DEPLOY_SECRET}" \
-                    //         -H "Content-Type: application/json" \
-                    //         -d '{"config":{"image":"${IMAGE_VERSIONED}"}}'
-                    // """
                 }
             }
         }
@@ -213,7 +166,7 @@ pipeline {
                 sh """
                     docker rmi ${IMAGE_VERSIONED} ${IMAGE_LATEST} || true
                     docker image prune -f || true
-                    echo "🧹 Local images cleaned up."
+                    echo "🧹 Local machine images cleaned up."
                 """
             }
         }
@@ -223,16 +176,12 @@ pipeline {
     post {
         success {
             echo "🎉 Pipeline SUCCESS – AttendSnap backend ${IMAGE_VERSIONED} deployed."
-            // Uncomment to send Slack / email:
-            // slackSend channel: '#deployments', color: 'good',
-            //             message: "✅ AttendSnap backend *${IMAGE_VERSIONED}* deployed."
         }
         failure {
-            echo "💥 Pipeline FAILED – check logs above."
-            // slackSend channel: '#deployments', color: 'danger',
-            //             message: "❌ AttendSnap backend pipeline failed on ${env.GIT_BRANCH}."
+            echo "💥 Pipeline FAILED – check build console output logs."
         }
         always {
+            // Cleans the workspace directory inside the active node executor block
             cleanWs()
         }
     }
