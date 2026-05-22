@@ -4,6 +4,7 @@ PyJWT
 bcrypt
 python-dotenv
 motor
+tensorflow-cpu
 mtcnn
 onnxruntime
 numpy
