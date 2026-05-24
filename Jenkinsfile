@@ -81,7 +81,6 @@ pipeline {
                     sh '''
                         echo "🐳 Building Docker image..."
                         docker build \
-                            --no-cache \
                             -t "$DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER" \
                             -t "$DOCKER_CREDS_USR/attendsnap:latest" \
                             -f Dockerfile \
