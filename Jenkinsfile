@@ -6,11 +6,6 @@ pipeline {
 
     environment {
 
-        IMAGE_NAME     = "${env.DOCKER_HUB_USER}/attendsnap"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"          
-        IMAGE_LATEST   = "${IMAGE_NAME}:latest"
-        IMAGE_VERSIONED= "${IMAGE_NAME}:${IMAGE_TAG}"
-
         DOCKER_CREDS   = credentials('dockerhub-credentials')   
         DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') 
 
@@ -83,16 +78,16 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir(BACKEND_DIR) {
-                    sh """
+                    sh '''
                         echo "🐳 Building Docker image..."
                         docker build \
                             --no-cache \
-                            -t ${IMAGE_VERSIONED} \
-                            -t ${IMAGE_LATEST} \
+                            -t "$DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER" \
+                            -t "$DOCKER_CREDS_USR/attendsnap:latest" \
                             -f Dockerfile \
                             .
-                        echo "✅ Image built: ${IMAGE_VERSIONED}"
-                    """
+                        echo "✅ Image built: $DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER"
+                    '''
                 }
             }
         }
