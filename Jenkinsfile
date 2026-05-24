@@ -1,28 +1,19 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  AttendSnap  –  Backend CI/CD Pipeline
-//  Scope : Build → Test → Push Docker image → Trigger cloud deploy
-//  Frontend is deployed independently on Vercel (not included here)
-// ─────────────────────────────────────────────────────────────────────────────
 
 pipeline {
 
     // Run on any available agent
     agent any
 
-    // ── Environment / Credentials ────────────────────────────────────────────
     environment {
-        // Docker Hub image name  –  ensure DOCKER_HUB_USER is set in Jenkins globals
+
         IMAGE_NAME     = "${env.DOCKER_HUB_USER}/attendsnap"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"          // e.g. "42"
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"          
         IMAGE_LATEST   = "${IMAGE_NAME}:latest"
         IMAGE_VERSIONED= "${IMAGE_NAME}:${IMAGE_TAG}"
 
-        // Credentials stored in Jenkins Credentials Store
-        // Add these via: Jenkins → Manage → Credentials
-        DOCKER_CREDS   = credentials('dockerhub-credentials')   // username+password
-        DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') // Secret text – Your Render deploy hook URL
+        DOCKER_CREDS   = credentials('dockerhub-credentials')   
+        DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') 
 
-        // Paths inside the repo
         BACKEND_DIR    = 'backend'
     }
 
@@ -34,13 +25,12 @@ pipeline {
         timestamps()
     }
 
-    // ── Trigger: manual only ─────────────────────────────────────────────────
-    // Run by clicking "Build Now" in the Jenkins UI — no automatic scheduling.
+    triggers {
+        pollSCM('* * * * *') 
+    }
 
-    // ═════════════════════════════════════════════════════════════════════════
     stages {
 
-        // ── 1. Checkout ───────────────────────────────────────────────────────
         stage('Checkout') {
             steps {
                 checkout scm
@@ -55,10 +45,10 @@ pipeline {
                 dir(BACKEND_DIR) {
                     sh '''
                         # Create isolated venv — avoids PEP 668 "externally managed" error
-                        python3 -m venv attend_snap_venv
+                        python3.11 -m venv attend_snap_venv
 
                         # Use explicit venv paths — no reliance on 'source activate'
-                        attend_snap_venv/bin/pip3 install --quiet flake8
+                        attend_snap_venv/bin/pip3.11 install --quiet flake8
                         attend_snap_venv/bin/flake8 app/ --max-line-length=120 --ignore=W503 || true
                     '''
                 }
@@ -135,7 +125,6 @@ pipeline {
             }
         }
 
-        // ── 6. Trigger Cloud Deployment (Render.com) ──────────────────────────
         stage('Trigger Cloud Deploy') {
             steps {
                 script {
