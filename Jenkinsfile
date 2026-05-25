@@ -80,7 +80,7 @@ pipeline {
                 dir(BACKEND_DIR) {
                     sh '''
                         echo "🐳 Building Docker image..."
-                        docker build \
+                        DOCKER_BUILDKIT=0 docker build \
                             -t "$DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER" \
                             -t "$DOCKER_CREDS_USR/attendsnap:latest" \
                             -f Dockerfile \
