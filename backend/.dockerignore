@@ -11,12 +11,15 @@ build/
 
 # Virtual environments — never copy into the image
 attend_snap/
+attend_snap_venv/
+attend_snap_env/
 venv/
 env/
 .venv/
 
 # Tests & CI
 tests/
+test-results/
 pytest.ini
 .pytest_cache/
 .coverage
