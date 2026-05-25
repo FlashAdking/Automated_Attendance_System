@@ -37,6 +37,16 @@ def _load_bgr(image_path: str):
     return img
 
 
+def _resize_if_too_large(img_bgr: np.ndarray, max_dim: int = 800) -> np.ndarray:
+    """Resize image if its longest side exceeds max_dim to save memory."""
+    h, w = img_bgr.shape[:2]
+    if max(h, w) > max_dim:
+        scale = max_dim / max(h, w)
+        new_w, new_h = int(w * scale), int(h * scale)
+        return cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return img_bgr
+
+
 def _align_face(img_bgr: np.ndarray, left_eye, right_eye) -> np.ndarray:
     """
     Rotate the image so the line joining both eyes is perfectly horizontal.
@@ -87,6 +97,9 @@ def extract_and_prepare_faces(image_path: str, mtcnn_detector):
     if img_bgr is None:
         print(f"[preprocess] Could not load: {image_path}")
         return [], []
+
+    # Resize to prevent OOM errors on Render free tier
+    img_bgr = _resize_if_too_large(img_bgr)
 
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     detections = mtcnn_detector.detect_faces(img_rgb)
@@ -139,6 +152,9 @@ def draw_boxes_on_faces(image_path: str, mtcnn_detector, output_path=None) -> st
     img_bgr = cv2.imdecode(raw, cv2.IMREAD_COLOR)
     if img_bgr is None:
         raise ValueError(f"Could not load image: {image_path}")
+
+    # Resize to prevent OOM errors on Render free tier
+    img_bgr = _resize_if_too_large(img_bgr)
 
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     detections = mtcnn_detector.detect_faces(img_rgb)
