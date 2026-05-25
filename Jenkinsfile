@@ -6,7 +6,6 @@ pipeline {
 
     environment {
 
-        DOCKER_CREDS   = credentials('dockerhub-credentials')   
         DEPLOY_WEBHOOK = credentials('cloud-deploy-webhook-url') 
 
         BACKEND_DIR    = 'backend'
@@ -81,11 +80,11 @@ pipeline {
                     sh '''
                         echo "🐳 Building Docker image..."
                         DOCKER_BUILDKIT=0 docker build \
-                            -t "$DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER" \
-                            -t "$DOCKER_CREDS_USR/attendsnap:latest" \
+                            -t "flashadking/attendsnap:$BUILD_NUMBER" \
+                            -t "flashadking/attendsnap:latest" \
                             -f Dockerfile \
                             .
-                        echo "✅ Image built: $DOCKER_CREDS_USR/attendsnap:$BUILD_NUMBER"
+                        echo "✅ Image built: flashadking/attendsnap:$BUILD_NUMBER"
                     '''
                 }
             }
@@ -94,28 +93,13 @@ pipeline {
         // ── 5. Push to Docker Hub ─────────────────────────────────────────────
         stage('Push to Docker Hub') {
             steps {
-                // Use withCredentials + single-quoted sh to prevent secret leaking in logs
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'HUB_USER',
-                    passwordVariable: 'HUB_PASS'
-                )]) {
-                    sh '''
-                        echo "📤 Logging in to Docker Hub..."
-                        echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
+                sh '''
+                    echo "📤 Pushing images..."
+                    docker push "flashadking/attendsnap:$BUILD_NUMBER"
+                    docker push "flashadking/attendsnap:latest"
 
-                        echo "📤 Pushing images..."
-                        docker push "$HUB_USER/attendsnap:$BUILD_NUMBER"
-                        docker push "$HUB_USER/attendsnap:latest"
-
-                        echo "✅ Images pushed successfully."
-                    '''
-                }
-            }
-            post {
-                always {
-                    sh 'docker logout || true'
-                }
+                    echo "✅ Images pushed successfully."
+                '''
             }
         }
 
