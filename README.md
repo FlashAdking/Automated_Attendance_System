@@ -1,6 +1,8 @@
 # 🎯 AttendSnap — AI-Powered Automated Attendance System
 
-> A full-stack attendance management platform that uses **FaceNet + MTCNN** face recognition to automatically mark student attendance from group photos. Built with **FastAPI**, **React (Vite)**, and **MongoDB**, deployed via a **Jenkins CI/CD pipeline** to **Docker Hub** and **Render**.
+[![Docker Hub](https://img.shields.io/badge/docker%20hub-flashadking%2Fattendsnap-blue?logo=docker)](https://hub.docker.com/repository/docker/flashadking/attendsnap/general)
+
+> A full-stack attendance management platform that uses **FaceNet + MTCNN** face recognition to automatically mark student attendance from group photos. Built with **FastAPI**, **React (Vite)**, and **MongoDB**, deployed via a **Jenkins CI/CD pipeline** to **Docker Hub** ([flashadking/attendsnap](https://hub.docker.com/repository/docker/flashadking/attendsnap/general)) and **Render**.
 
 ---
 
@@ -56,6 +58,16 @@
 
 ---
 
+## 🌊 Technical Flow
+
+1. **Client Request:** The React (Vite) frontend captures a group photo or handles manual attendance actions, sending requests to the FastAPI backend.
+2. **AI Processing:** For AI attendance, FastAPI receives the image. MTCNN detects faces, and FaceNet (ONNX Runtime) generates 128-d embeddings.
+3. **Face Matching:** Generated embeddings are compared against registered student data to identify and mark students as Present.
+4. **Data Persistence:** Attendance records and sessions are stored in MongoDB. Generated charts and images are uploaded to Cloudinary.
+5. **Notifications:** Automated emails containing attendance summaries and charts are sent via Gmail SMTP.
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -106,7 +118,7 @@ Automated_Attendance_System/
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started (Local Setup)
 
 ### Prerequisites
 
@@ -195,6 +207,8 @@ pytest tests/ -v --tb=short
 ---
 
 ## 🐳 Docker
+
+**Docker Hub Repository:** [flashadking/attendsnap/general](https://hub.docker.com/repository/docker/flashadking/attendsnap/general)
 
 ### Build & Run with Docker Compose
 
