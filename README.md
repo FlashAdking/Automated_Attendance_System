@@ -10,7 +10,7 @@
 
 ### 🤖 AI Attendance
 - Upload a group photo and individual portrait — the system detects, aligns, and matches faces automatically
-- MTCNN for face detection + FaceNet (ONNX Runtime) for 128-d embedding extraction & comparison
+- MTCNN for face detection + FaceNet (ONNX Runtime) for 512-d embedding extraction & comparison
 - Lightweight inference: **~50 MB** ONNX model vs 1.2 GB TensorFlow
 
 ### 📋 Manual Attendance
@@ -61,7 +61,7 @@
 ## 🌊 Technical Flow
 
 1. **Client Request:** The React (Vite) frontend captures a group photo or handles manual attendance actions, sending requests to the FastAPI backend.
-2. **AI Processing:** For AI attendance, FastAPI receives the image. MTCNN detects faces, and FaceNet (ONNX Runtime) generates 128-d embeddings.
+2. **AI Processing:** For AI attendance, FastAPI receives the image. MTCNN detects faces, and FaceNet (ONNX Runtime) generates 512-d embeddings.
 3. **Face Matching:** Generated embeddings are compared against registered student data to identify and mark students as Present.
 4. **Data Persistence:** Attendance records and sessions are stored in MongoDB. Generated charts and images are uploaded to Cloudinary.
 5. **Notifications:** Automated emails containing attendance summaries and charts are sent via Gmail SMTP.
